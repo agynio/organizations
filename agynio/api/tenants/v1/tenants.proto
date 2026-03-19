@@ -1,0 +1,80 @@
+syntax = "proto3";
+
+package agynio.api.tenants.v1;
+
+import "google/protobuf/timestamp.proto";
+
+option go_package = "github.com/agynio/api/gen/agynio/api/tenants/v1;tenantsv1";
+
+// TenantsService manages tenant definitions.
+//
+// This is a control-plane service. It stores desired state;
+// other services reconcile toward it.
+service TenantsService {
+  rpc CreateTenant(CreateTenantRequest) returns (CreateTenantResponse);
+  rpc GetTenant(GetTenantRequest) returns (GetTenantResponse);
+  rpc UpdateTenant(UpdateTenantRequest) returns (UpdateTenantResponse);
+  rpc DeleteTenant(DeleteTenantRequest) returns (DeleteTenantResponse);
+  rpc ListTenants(ListTenantsRequest) returns (ListTenantsResponse);
+  rpc ListAccessibleTenants(ListAccessibleTenantsRequest) returns (ListAccessibleTenantsResponse);
+}
+
+// ===========================================================================
+// Tenant
+// ===========================================================================
+
+message Tenant {
+  string id = 1; // UUID
+  string name = 2;
+  google.protobuf.Timestamp created_at = 3;
+  google.protobuf.Timestamp updated_at = 4;
+}
+
+message CreateTenantRequest {
+  string name = 1;
+}
+
+message CreateTenantResponse {
+  Tenant tenant = 1;
+}
+
+message GetTenantRequest {
+  string id = 1; // UUID
+}
+
+message GetTenantResponse {
+  Tenant tenant = 1;
+}
+
+message UpdateTenantRequest {
+  string id = 1; // UUID
+  optional string name = 2;
+}
+
+message UpdateTenantResponse {
+  Tenant tenant = 1;
+}
+
+message DeleteTenantRequest {
+  string id = 1; // UUID
+}
+
+message DeleteTenantResponse {}
+
+message ListTenantsRequest {
+  int32 page_size = 1;
+  string page_token = 2;
+}
+
+message ListTenantsResponse {
+  repeated Tenant tenants = 1;
+  string next_page_token = 2;
+}
+
+message ListAccessibleTenantsRequest {
+  string identity_id = 1; // UUID
+}
+
+message ListAccessibleTenantsResponse {
+  repeated Tenant tenants = 1;
+}
