@@ -85,17 +85,28 @@ deployments:
         name: component-chart
         repo: https://charts.devspace.sh
       values:
+        securityContext:
+          runAsUser: 1000
+          runAsGroup: 1000
+          fsGroup: 1000
         containers:
           - image: ${E2E_IMAGE}
             env:
               - name: TENANTS_ADDR
                 value: "tenants:50051"
+            volumeMounts:
+              - containerPath: /opt/app/data
+                volume:
+                  name: e2e-data
+        volumes:
+          - name: e2e-data
+            emptyDir: {}
         labels:
           app.kubernetes.io/name: tenants-e2e
 
 commands:
-  test:e2e: |-
-    devspace run-pipeline test:e2e $@
+  test-e2e: |-
+    devspace run-pipeline test-e2e $@
 
 pipelines:
   dev:
@@ -127,15 +138,41 @@ pipelines:
         stop_dev tenants
       fi
 
-  test:e2e:
+  test-e2e:
     run: |-
       create_deployments e2e-runner
       start_dev e2e-runner &
-      sleep 5
+
+      echo "Waiting for sync to complete..."
+      SYNC_READY=false
+      for i in $(seq 1 60); do
+        if exec_container \
+          --label-selector "app.kubernetes.io/name=tenants-e2e" \
+          -n ${TENANTS_NAMESPACE} \
+          -- test -f /opt/app/data/go.mod 2>/dev/null; then
+          SYNC_READY=true
+          break
+        fi
+        sleep 2
+      done
+
+      if [ "$SYNC_READY" != "true" ]; then
+        echo "ERROR: sync did not complete within 120s" >&2
+        stop_dev e2e-runner || true
+        purge_deployments e2e-runner || true
+        exit 1
+      fi
+
+      echo "Sync complete. Running e2e tests..."
       exec_container \
         --label-selector "app.kubernetes.io/name=tenants-e2e" \
         -n ${TENANTS_NAMESPACE} \
-        -- bash -c 'cd /opt/app/data && buf generate buf.build/agynio/api --path agynio/api/tenants/v1 --path agynio/api/authorization/v1 && go test -v -count=1 -tags e2e ./test/e2e/'
+        -- bash -c '
+          set -eu
+          cd /opt/app/data
+          buf generate buf.build/agynio/api --path agynio/api/tenants/v1 --path agynio/api/authorization/v1
+          go test -v -count=1 -tags e2e ./test/e2e/
+        '
       EXIT_CODE=$?
       stop_dev e2e-runner
       purge_deployments e2e-runner
@@ -195,3 +232,4 @@ dev:
           - .devspace/
           - /.gen/
           - /tmp/
+          - /bootstrap/
