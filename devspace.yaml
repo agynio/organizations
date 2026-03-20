@@ -194,3 +194,4 @@ dev:
           - .devspace/
           - /.gen/
           - /tmp/
+          - /bootstrap/
