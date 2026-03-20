@@ -83,4 +83,4 @@ jobs:
         run: echo "KUBECONFIG=$GITHUB_WORKSPACE/bootstrap/stacks/k8s/.kube/agyn-local-kubeconfig.yaml" >> "$GITHUB_ENV"
 
       - name: Run e2e tests
-        run: devspace run test:e2e
+        run: devspace run test-e2e
