@@ -27,7 +27,7 @@ functions:
     fi
   patch_deployment: |-
     echo "Patching tenants deployment for DevSpace..."
-    kubectl patch deployment tenants-tenants -n ${TENANTS_NAMESPACE} --type strategic --patch "$(cat <<'EOF'
+    kubectl patch deployment tenants -n ${TENANTS_NAMESPACE} --type strategic --patch "$(cat <<'EOF'
     spec:
       template:
         spec:
