@@ -25,7 +25,7 @@ jobs:
           version: 1.66.0
 
       - name: Generate protobuf bindings
-        run: buf generate buf.build/agynio/api --path agynio/api/tenants/v1 --path agynio/api/authorization/v1
+        run: buf generate buf.build/agynio/api --path agynio/api/organizations/v1 --path agynio/api/authorization/v1
 
       - name: Run tests
         run: go test ./...
@@ -39,7 +39,7 @@ jobs:
     timeout-minutes: 45
 
     steps:
-      - name: Checkout tenants
+      - name: Checkout organizations
         uses: actions/checkout@v4
 
       - name: Checkout bootstrap

@@ -23,7 +23,7 @@ RUN --mount=type=cache,target=/go/pkg/mod \
 
 COPY buf.gen.yaml ./
 RUN buf generate buf.build/agynio/api \
-    --path agynio/api/tenants/v1 \
+    --path agynio/api/organizations/v1 \
     --path agynio/api/authorization/v1
 
 COPY . .
@@ -33,16 +33,16 @@ ENV CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH
 
 RUN --mount=type=cache,target=/go/pkg/mod \
     --mount=type=cache,target=/root/.cache/go-build \
-    go build -trimpath -ldflags "-s -w" -o /out/tenants ./cmd/tenants-service
+    go build -trimpath -ldflags "-s -w" -o /out/organizations ./cmd/organizations-service
 
 FROM alpine:3.21 AS runtime
 
 WORKDIR /app
 
-COPY --from=build /out/tenants /app/tenants
+COPY --from=build /out/organizations /app/organizations
 
 RUN addgroup -g 10001 -S app && adduser -u 10001 -S app -G app
 
 USER 10001
 
-ENTRYPOINT ["/app/tenants"]
+ENTRYPOINT ["/app/organizations"]

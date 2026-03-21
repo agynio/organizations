@@ -6,18 +6,18 @@ import (
 	"fmt"
 	"strings"
 
-	authorizationv1 "github.com/agynio/tenants/.gen/go/agynio/api/authorization/v1"
-	tenantsv1 "github.com/agynio/tenants/.gen/go/agynio/api/tenants/v1"
-	"github.com/agynio/tenants/internal/store"
+	authorizationv1 "github.com/agynio/organizations/.gen/go/agynio/api/authorization/v1"
+	organizationsv1 "github.com/agynio/organizations/.gen/go/agynio/api/organizations/v1"
+	"github.com/agynio/organizations/internal/store"
 	"github.com/google/uuid"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
 
-const tenantObjectPrefix = "tenant:"
+const organizationObjectPrefix = "organization:"
 
 type Server struct {
-	tenantsv1.UnimplementedTenantsServiceServer
+	organizationsv1.UnimplementedOrganizationsServiceServer
 	store               *store.Store
 	authorizationClient authorizationv1.AuthorizationServiceClient
 }
@@ -26,27 +26,27 @@ func New(store *store.Store, authorizationClient authorizationv1.AuthorizationSe
 	return &Server{store: store, authorizationClient: authorizationClient}
 }
 
-func (s *Server) CreateTenant(ctx context.Context, req *tenantsv1.CreateTenantRequest) (*tenantsv1.CreateTenantResponse, error) {
-	tenant, err := s.store.CreateTenant(ctx, store.TenantInput{Name: req.GetName()})
+func (s *Server) CreateOrganization(ctx context.Context, req *organizationsv1.CreateOrganizationRequest) (*organizationsv1.CreateOrganizationResponse, error) {
+	organization, err := s.store.CreateOrganization(ctx, store.OrganizationInput{Name: req.GetName()})
 	if err != nil {
 		return nil, toStatusError(err)
 	}
-	return &tenantsv1.CreateTenantResponse{Tenant: toProtoTenant(tenant)}, nil
+	return &organizationsv1.CreateOrganizationResponse{Organization: toProtoOrganization(organization)}, nil
 }
 
-func (s *Server) GetTenant(ctx context.Context, req *tenantsv1.GetTenantRequest) (*tenantsv1.GetTenantResponse, error) {
+func (s *Server) GetOrganization(ctx context.Context, req *organizationsv1.GetOrganizationRequest) (*organizationsv1.GetOrganizationResponse, error) {
 	id, err := parseUUID(req.GetId())
 	if err != nil {
 		return nil, status.Errorf(codes.InvalidArgument, "id: %v", err)
 	}
-	tenant, err := s.store.GetTenant(ctx, id)
+	organization, err := s.store.GetOrganization(ctx, id)
 	if err != nil {
 		return nil, toStatusError(err)
 	}
-	return &tenantsv1.GetTenantResponse{Tenant: toProtoTenant(tenant)}, nil
+	return &organizationsv1.GetOrganizationResponse{Organization: toProtoOrganization(organization)}, nil
 }
 
-func (s *Server) UpdateTenant(ctx context.Context, req *tenantsv1.UpdateTenantRequest) (*tenantsv1.UpdateTenantResponse, error) {
+func (s *Server) UpdateOrganization(ctx context.Context, req *organizationsv1.UpdateOrganizationRequest) (*organizationsv1.UpdateOrganizationResponse, error) {
 	id, err := parseUUID(req.GetId())
 	if err != nil {
 		return nil, status.Errorf(codes.InvalidArgument, "id: %v", err)
@@ -55,51 +55,51 @@ func (s *Server) UpdateTenant(ctx context.Context, req *tenantsv1.UpdateTenantRe
 		return nil, status.Error(codes.InvalidArgument, "at least one field must be provided")
 	}
 
-	update := store.TenantUpdate{}
+	update := store.OrganizationUpdate{}
 	if req.Name != nil {
 		value := req.GetName()
 		update.Name = &value
 	}
 
-	tenant, err := s.store.UpdateTenant(ctx, id, update)
+	organization, err := s.store.UpdateOrganization(ctx, id, update)
 	if err != nil {
 		return nil, toStatusError(err)
 	}
-	return &tenantsv1.UpdateTenantResponse{Tenant: toProtoTenant(tenant)}, nil
+	return &organizationsv1.UpdateOrganizationResponse{Organization: toProtoOrganization(organization)}, nil
 }
 
-func (s *Server) DeleteTenant(ctx context.Context, req *tenantsv1.DeleteTenantRequest) (*tenantsv1.DeleteTenantResponse, error) {
+func (s *Server) DeleteOrganization(ctx context.Context, req *organizationsv1.DeleteOrganizationRequest) (*organizationsv1.DeleteOrganizationResponse, error) {
 	id, err := parseUUID(req.GetId())
 	if err != nil {
 		return nil, status.Errorf(codes.InvalidArgument, "id: %v", err)
 	}
-	if err := s.store.DeleteTenant(ctx, id); err != nil {
+	if err := s.store.DeleteOrganization(ctx, id); err != nil {
 		return nil, toStatusError(err)
 	}
-	return &tenantsv1.DeleteTenantResponse{}, nil
+	return &organizationsv1.DeleteOrganizationResponse{}, nil
 }
 
-func (s *Server) ListTenants(ctx context.Context, req *tenantsv1.ListTenantsRequest) (*tenantsv1.ListTenantsResponse, error) {
+func (s *Server) ListOrganizations(ctx context.Context, req *organizationsv1.ListOrganizationsRequest) (*organizationsv1.ListOrganizationsResponse, error) {
 	cursor, err := decodePageCursor(req.GetPageToken())
 	if err != nil {
 		return nil, status.Errorf(codes.InvalidArgument, "invalid page_token: %v", err)
 	}
-	result, err := s.store.ListTenants(ctx, store.TenantFilter{}, req.GetPageSize(), cursor)
+	result, err := s.store.ListOrganizations(ctx, store.OrganizationFilter{}, req.GetPageSize(), cursor)
 	if err != nil {
 		return nil, toStatusError(err)
 	}
-	tenants, nextToken := mapListResult(result.Tenants, result.NextCursor, toProtoTenant)
-	return &tenantsv1.ListTenantsResponse{Tenants: tenants, NextPageToken: nextToken}, nil
+	organizations, nextToken := mapListResult(result.Organizations, result.NextCursor, toProtoOrganization)
+	return &organizationsv1.ListOrganizationsResponse{Organizations: organizations, NextPageToken: nextToken}, nil
 }
 
-func (s *Server) ListAccessibleTenants(ctx context.Context, req *tenantsv1.ListAccessibleTenantsRequest) (*tenantsv1.ListAccessibleTenantsResponse, error) {
+func (s *Server) ListAccessibleOrganizations(ctx context.Context, req *organizationsv1.ListAccessibleOrganizationsRequest) (*organizationsv1.ListAccessibleOrganizationsResponse, error) {
 	identityID, err := parseUUID(req.GetIdentityId())
 	if err != nil {
 		return nil, status.Errorf(codes.InvalidArgument, "identity_id: %v", err)
 	}
 
 	authResponse, err := s.authorizationClient.ListObjects(ctx, &authorizationv1.ListObjectsRequest{
-		Type:     "tenant",
+		Type:     "organization",
 		Relation: "member",
 		User:     fmt.Sprintf("identity:%s", identityID.String()),
 	})
@@ -107,27 +107,27 @@ func (s *Server) ListAccessibleTenants(ctx context.Context, req *tenantsv1.ListA
 		return nil, status.Errorf(codes.Internal, "authorization list objects: %v", err)
 	}
 	if len(authResponse.Objects) == 0 {
-		return &tenantsv1.ListAccessibleTenantsResponse{Tenants: []*tenantsv1.Tenant{}}, nil
+		return &organizationsv1.ListAccessibleOrganizationsResponse{Organizations: []*organizationsv1.Organization{}}, nil
 	}
 
-	tenantIDs := make([]uuid.UUID, 0, len(authResponse.Objects))
+	organizationIDs := make([]uuid.UUID, 0, len(authResponse.Objects))
 	for _, object := range authResponse.Objects {
-		tenantID, err := parseTenantObject(object)
+		organizationID, err := parseOrganizationObject(object)
 		if err != nil {
 			return nil, status.Errorf(codes.Internal, "authorization object %q: %v", object, err)
 		}
-		tenantIDs = append(tenantIDs, tenantID)
+		organizationIDs = append(organizationIDs, organizationID)
 	}
 
-	tenants, err := s.store.GetTenantsByIDs(ctx, tenantIDs)
+	organizations, err := s.store.GetOrganizationsByIDs(ctx, organizationIDs)
 	if err != nil {
 		return nil, toStatusError(err)
 	}
-	protoTenants := make([]*tenantsv1.Tenant, len(tenants))
-	for i, tenant := range tenants {
-		protoTenants[i] = toProtoTenant(tenant)
+	protoOrganizations := make([]*organizationsv1.Organization, len(organizations))
+	for i, organization := range organizations {
+		protoOrganizations[i] = toProtoOrganization(organization)
 	}
-	return &tenantsv1.ListAccessibleTenantsResponse{Tenants: protoTenants}, nil
+	return &organizationsv1.ListAccessibleOrganizationsResponse{Organizations: protoOrganizations}, nil
 }
 
 func decodePageCursor(token string) (*store.PageCursor, error) {
@@ -163,11 +163,11 @@ func parseUUID(value string) (uuid.UUID, error) {
 	return id, nil
 }
 
-func parseTenantObject(value string) (uuid.UUID, error) {
-	if !strings.HasPrefix(value, tenantObjectPrefix) {
-		return uuid.UUID{}, fmt.Errorf("expected prefix %q", tenantObjectPrefix)
+func parseOrganizationObject(value string) (uuid.UUID, error) {
+	if !strings.HasPrefix(value, organizationObjectPrefix) {
+		return uuid.UUID{}, fmt.Errorf("expected prefix %q", organizationObjectPrefix)
 	}
-	return parseUUID(strings.TrimPrefix(value, tenantObjectPrefix))
+	return parseUUID(strings.TrimPrefix(value, organizationObjectPrefix))
 }
 
 func toStatusError(err error) error {

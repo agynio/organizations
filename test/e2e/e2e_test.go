@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	tenantsv1 "github.com/agynio/tenants/.gen/go/agynio/api/tenants/v1"
+	organizationsv1 "github.com/agynio/organizations/.gen/go/agynio/api/organizations/v1"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
@@ -20,56 +20,56 @@ import (
 
 const listPageSize int32 = 50
 
-func TestTenantsServiceE2E(t *testing.T) {
+func TestOrganizationsServiceE2E(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	defer cancel()
 
-	conn, err := grpc.DialContext(ctx, tenantsAddr, grpc.WithTransportCredentials(insecure.NewCredentials()), grpc.WithBlock())
+	conn, err := grpc.DialContext(ctx, organizationsAddr, grpc.WithTransportCredentials(insecure.NewCredentials()), grpc.WithBlock())
 	require.NoError(t, err)
 	t.Cleanup(func() {
 		_ = conn.Close()
 	})
 
-	client := tenantsv1.NewTenantsServiceClient(conn)
+	client := organizationsv1.NewOrganizationsServiceClient(conn)
 
 	testID := uuid.NewString()
-	tenantResp1, err := client.CreateTenant(ctx, &tenantsv1.CreateTenantRequest{Name: "Tenant Alpha " + testID})
+	organizationResp1, err := client.CreateOrganization(ctx, &organizationsv1.CreateOrganizationRequest{Name: "Organization Alpha " + testID})
 	require.NoError(t, err)
-	tenantID1 := tenantResp1.Tenant.Id
+	organizationID1 := organizationResp1.Organization.Id
 
-	tenantResp2, err := client.CreateTenant(ctx, &tenantsv1.CreateTenantRequest{Name: "Tenant Beta " + testID})
+	organizationResp2, err := client.CreateOrganization(ctx, &organizationsv1.CreateOrganizationRequest{Name: "Organization Beta " + testID})
 	require.NoError(t, err)
-	tenantID2 := tenantResp2.Tenant.Id
+	organizationID2 := organizationResp2.Organization.Id
 
-	getResp, err := client.GetTenant(ctx, &tenantsv1.GetTenantRequest{Id: tenantID1})
+	getResp, err := client.GetOrganization(ctx, &organizationsv1.GetOrganizationRequest{Id: organizationID1})
 	require.NoError(t, err)
-	require.Equal(t, tenantID1, getResp.Tenant.Id)
+	require.Equal(t, organizationID1, getResp.Organization.Id)
 
-	updatedTenantResp, err := client.UpdateTenant(ctx, &tenantsv1.UpdateTenantRequest{
-		Id:   tenantID1,
-		Name: proto.String("Tenant Alpha Updated " + testID),
+	updatedOrganizationResp, err := client.UpdateOrganization(ctx, &organizationsv1.UpdateOrganizationRequest{
+		Id:   organizationID1,
+		Name: proto.String("Organization Alpha Updated " + testID),
 	})
 	require.NoError(t, err)
-	require.Equal(t, "Tenant Alpha Updated "+testID, updatedTenantResp.Tenant.Name)
+	require.Equal(t, "Organization Alpha Updated "+testID, updatedOrganizationResp.Organization.Name)
 
-	listResp, err := client.ListTenants(ctx, &tenantsv1.ListTenantsRequest{PageSize: 1})
+	listResp, err := client.ListOrganizations(ctx, &organizationsv1.ListOrganizationsRequest{PageSize: 1})
 	require.NoError(t, err)
-	require.NotEmpty(t, listResp.Tenants)
+	require.NotEmpty(t, listResp.Organizations)
 	require.NotEmpty(t, listResp.NextPageToken)
 
-	tenants := listTenants(ctx, t, client)
-	require.True(t, hasID(tenants, tenantID1))
-	require.True(t, hasID(tenants, tenantID2))
+	organizations := listOrganizations(ctx, t, client)
+	require.True(t, hasID(organizations, organizationID1))
+	require.True(t, hasID(organizations, organizationID2))
 
-	_, err = client.UpdateTenant(ctx, &tenantsv1.UpdateTenantRequest{Id: tenantID1})
+	_, err = client.UpdateOrganization(ctx, &organizationsv1.UpdateOrganizationRequest{Id: organizationID1})
 	requireStatusCode(t, err, codes.InvalidArgument)
 
-	_, err = client.GetTenant(ctx, &tenantsv1.GetTenantRequest{Id: uuid.NewString()})
+	_, err = client.GetOrganization(ctx, &organizationsv1.GetOrganizationRequest{Id: uuid.NewString()})
 	requireStatusCode(t, err, codes.NotFound)
 
-	_, err = client.DeleteTenant(ctx, &tenantsv1.DeleteTenantRequest{Id: tenantID2})
+	_, err = client.DeleteOrganization(ctx, &organizationsv1.DeleteOrganizationRequest{Id: organizationID2})
 	require.NoError(t, err)
-	_, err = client.DeleteTenant(ctx, &tenantsv1.DeleteTenantRequest{Id: tenantID1})
+	_, err = client.DeleteOrganization(ctx, &organizationsv1.DeleteOrganizationRequest{Id: organizationID1})
 	require.NoError(t, err)
 }
 
@@ -90,17 +90,17 @@ func listPaged[T any](t *testing.T, resource string, fetch func(pageToken string
 	return nil
 }
 
-func listTenants(ctx context.Context, t *testing.T, client tenantsv1.TenantsServiceClient) []*tenantsv1.Tenant {
-	return listPaged(t, "tenant", func(pageToken string) ([]*tenantsv1.Tenant, string, error) {
-		resp, err := client.ListTenants(ctx, &tenantsv1.ListTenantsRequest{PageSize: listPageSize, PageToken: pageToken})
+func listOrganizations(ctx context.Context, t *testing.T, client organizationsv1.OrganizationsServiceClient) []*organizationsv1.Organization {
+	return listPaged(t, "organization", func(pageToken string) ([]*organizationsv1.Organization, string, error) {
+		resp, err := client.ListOrganizations(ctx, &organizationsv1.ListOrganizationsRequest{PageSize: listPageSize, PageToken: pageToken})
 		if err != nil {
 			return nil, "", err
 		}
-		return resp.Tenants, resp.NextPageToken, nil
+		return resp.Organizations, resp.NextPageToken, nil
 	})
 }
 
-func hasID(items []*tenantsv1.Tenant, id string) bool {
+func hasID(items []*organizationsv1.Organization, id string) bool {
 	for _, item := range items {
 		if item.GetId() == id {
 			return true

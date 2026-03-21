@@ -10,21 +10,21 @@ import (
 	"os/signal"
 	"syscall"
 
-	authorizationv1 "github.com/agynio/tenants/.gen/go/agynio/api/authorization/v1"
-	tenantsv1 "github.com/agynio/tenants/.gen/go/agynio/api/tenants/v1"
+	authorizationv1 "github.com/agynio/organizations/.gen/go/agynio/api/authorization/v1"
+	organizationsv1 "github.com/agynio/organizations/.gen/go/agynio/api/organizations/v1"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 
-	"github.com/agynio/tenants/internal/config"
-	"github.com/agynio/tenants/internal/db"
-	"github.com/agynio/tenants/internal/server"
-	"github.com/agynio/tenants/internal/store"
+	"github.com/agynio/organizations/internal/config"
+	"github.com/agynio/organizations/internal/db"
+	"github.com/agynio/organizations/internal/server"
+	"github.com/agynio/organizations/internal/store"
 )
 
 func main() {
 	if err := run(); err != nil {
-		log.Fatalf("tenants-service: %v", err)
+		log.Fatalf("organizations-service: %v", err)
 	}
 }
 
@@ -59,7 +59,7 @@ func run() error {
 
 	grpcServer := grpc.NewServer()
 	serverInstance := server.New(store.New(pool), authorizationv1.NewAuthorizationServiceClient(authConn))
-	tenantsv1.RegisterTenantsServiceServer(grpcServer, serverInstance)
+	organizationsv1.RegisterOrganizationsServiceServer(grpcServer, serverInstance)
 
 	lis, err := net.Listen("tcp", cfg.GRPCAddress)
 	if err != nil {
@@ -71,7 +71,7 @@ func run() error {
 		grpcServer.GracefulStop()
 	}()
 
-	log.Printf("TenantsService listening on %s", cfg.GRPCAddress)
+	log.Printf("OrganizationsService listening on %s", cfg.GRPCAddress)
 
 	if err := grpcServer.Serve(lis); err != nil {
 		if errors.Is(err, grpc.ErrServerStopped) {

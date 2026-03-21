@@ -6,28 +6,28 @@ import (
 	"github.com/google/uuid"
 )
 
-type Tenant struct {
+type Organization struct {
 	ID        uuid.UUID
 	Name      string
 	CreatedAt time.Time
 	UpdatedAt time.Time
 }
 
-type TenantInput struct {
+type OrganizationInput struct {
 	Name string
 }
 
-type TenantUpdate struct {
+type OrganizationUpdate struct {
 	Name *string
 }
 
-type TenantFilter struct{}
+type OrganizationFilter struct{}
 
 type PageCursor struct {
 	AfterID uuid.UUID
 }
 
-type TenantListResult struct {
-	Tenants    []Tenant
+type OrganizationListResult struct {
+	Organizations []Organization
 	NextCursor *PageCursor
 }
