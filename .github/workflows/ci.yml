@@ -25,7 +25,7 @@ jobs:
           version: 1.66.0
 
       - name: Generate protobuf bindings
-        run: buf generate buf.build/agynio/api --path agynio/api/tenants/v1 --path agynio/api/authorization/v1
+        run: buf generate buf.build/agynio/api --path agynio/api/organizations/v1 --path agynio/api/authorization/v1
 
       - name: Run tests
         run: go test ./...
@@ -39,7 +39,7 @@ jobs:
     timeout-minutes: 45
 
     steps:
-      - name: Checkout tenants
+      - name: Checkout organizations
         uses: actions/checkout@v4
 
       - name: Checkout bootstrap
@@ -79,6 +79,12 @@ jobs:
 
       - name: Set kubeconfig
         run: echo "KUBECONFIG=$GITHUB_WORKSPACE/bootstrap/stacks/k8s/.kube/agyn-local-kubeconfig.yaml" >> "$GITHUB_ENV"
+
+      - name: Build e2e test image
+        run: docker build -t ghcr.io/agynio/tenants:e2e-test .
+
+      - name: Import image into k3d
+        run: k3d image import ghcr.io/agynio/tenants:e2e-test --cluster agyn-local
 
       - name: Run e2e tests
         run: devspace run test-e2e

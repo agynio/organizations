@@ -27,7 +27,7 @@ functions:
     fi
   patch_deployment: |-
     echo "Patching tenants deployment for DevSpace..."
-    kubectl patch deployment tenants-tenants -n ${TENANTS_NAMESPACE} --type strategic --patch "$(cat <<'EOF'
+    kubectl patch deployment tenants -n ${TENANTS_NAMESPACE} --type strategic --patch "$(cat <<'EOF'
     spec:
       template:
         spec:
@@ -52,8 +52,8 @@ functions:
                     sleep 1; elapsed=$((elapsed + 1))
                     [ "$elapsed" -ge 120 ] && { echo "ERROR: sync timeout" >&2; exit 1; }
                   done
-                  buf generate buf.build/agynio/api --path agynio/api/tenants/v1 --path agynio/api/authorization/v1
-                  exec go run ./cmd/tenants-service
+                  buf generate buf.build/agynio/api --path agynio/api/organizations/v1 --path agynio/api/authorization/v1
+                  exec go run ./cmd/organizations-service
               volumeMounts:
                 - name: data
                   mountPath: /opt/app/data
@@ -92,7 +92,7 @@ deployments:
         containers:
           - image: ${E2E_IMAGE}
             env:
-              - name: TENANTS_ADDR
+              - name: ORGANIZATIONS_ADDR
                 value: "tenants:50051"
             volumeMounts:
               - containerPath: /opt/app/data
@@ -140,6 +140,12 @@ pipelines:
 
   test-e2e:
     run: |-
+      disable_argocd_sync
+
+      # Update the deployment to use the freshly-built image (built and loaded in CI)
+      kubectl set image deployment/tenants tenants=ghcr.io/agynio/tenants:e2e-test -n ${TENANTS_NAMESPACE}
+      kubectl rollout status deployment/tenants -n ${TENANTS_NAMESPACE} --timeout=120s
+
       create_deployments e2e-runner
       start_dev e2e-runner &
 
@@ -170,7 +176,7 @@ pipelines:
         -- bash -c '
           set -eu
           cd /opt/app/data
-          buf generate buf.build/agynio/api --path agynio/api/tenants/v1 --path agynio/api/authorization/v1
+          buf generate buf.build/agynio/api --path agynio/api/organizations/v1 --path agynio/api/authorization/v1
           go test -v -count=1 -tags e2e ./test/e2e/
         '
       EXIT_CODE=$?

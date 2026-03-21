@@ -7,7 +7,7 @@ global:
 
 image:
   registry: ""
-  repository: ghcr.io/agynio/tenants
+  repository: ghcr.io/agynio/organizations
   tag: ""
   pullPolicy: IfNotPresent
   pullSecrets: []

@@ -1,6 +1,6 @@
-# Tenants Service
+# Organizations Service
 
-The Tenants service manages tenant definitions and accessibility.
+The Organizations service manages organization definitions and accessibility.
 
 Architecture: [Tenancy](https://github.com/agynio/architecture/blob/main/architecture/tenancy.md)
 
