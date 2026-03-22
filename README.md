@@ -2,7 +2,7 @@
 
 The Organizations service manages organization definitions and accessibility.
 
-Architecture: [Tenancy](https://github.com/agynio/architecture/blob/main/architecture/tenancy.md)
+Architecture: [Organizations](https://github.com/agynio/architecture/blob/main/architecture/organizations.md)
 
 ## Local Development
 
