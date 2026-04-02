@@ -171,14 +171,14 @@ func (s *Server) RemoveMembership(ctx context.Context, req *organizationsv1.Remo
 		return nil, status.Error(codes.PermissionDenied, "missing permission to manage members")
 	}
 
-	if err := s.store.DeleteMembership(ctx, membership.ID); err != nil {
-		return nil, toStatusError(err)
-	}
-
 	if membership.Status == store.MembershipStatusActive {
 		if err := s.deleteTuple(ctx, membership.IdentityID, string(membership.Role), membership.OrganizationID); err != nil {
 			return nil, status.Errorf(codes.Internal, "failed to delete membership tuple: %v", err)
 		}
+	}
+
+	if err := s.store.DeleteMembership(ctx, membership.ID); err != nil {
+		return nil, toStatusError(err)
 	}
 
 	return &organizationsv1.RemoveMembershipResponse{}, nil

@@ -99,16 +99,7 @@ func (s *Server) CreateOrganization(ctx context.Context, req *organizationsv1.Cr
 		return nil, toStatusError(err)
 	}
 
-	_, err = s.authorizationClient.Write(ctx, &authorizationv1.WriteRequest{
-		Writes: []*authorizationv1.TupleKey{
-			{
-				User:     fmt.Sprintf("%s%s", identityObjectPrefix, identityID.String()),
-				Relation: "owner",
-				Object:   fmt.Sprintf("%s%s", organizationObjectPrefix, organization.ID.String()),
-			},
-		},
-	})
-	if err != nil {
+	if err := s.writeTuple(ctx, identityID, "owner", organization.ID); err != nil {
 		_ = s.store.DeleteOrganization(ctx, organization.ID)
 		return nil, status.Errorf(codes.Internal, "failed to write ownership tuple: %v", err)
 	}

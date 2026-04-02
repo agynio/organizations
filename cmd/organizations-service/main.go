@@ -52,7 +52,7 @@ func run() error {
 		return fmt.Errorf("apply migrations: %w", err)
 	}
 
-	authConn, err := grpc.DialContext(ctx, cfg.AuthorizationAddress, grpc.WithTransportCredentials(insecure.NewCredentials()), grpc.WithBlock())
+	authConn, err := grpc.NewClient(cfg.AuthorizationAddress, grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
 		return fmt.Errorf("connect to authorization: %w", err)
 	}
