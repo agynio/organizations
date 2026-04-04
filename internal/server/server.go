@@ -103,6 +103,18 @@ func (s *Server) CreateOrganization(ctx context.Context, req *organizationsv1.Cr
 		_ = s.store.DeleteOrganization(ctx, organization.ID)
 		return nil, status.Errorf(codes.Internal, "failed to write ownership tuple: %v", err)
 	}
+
+	_, err = s.store.CreateMembership(ctx, store.MembershipInput{
+		OrganizationID: organization.ID,
+		IdentityID:     identityID,
+		Role:           store.MembershipRoleOwner,
+		Status:         store.MembershipStatusActive,
+	})
+	if err != nil {
+		_ = s.deleteTuple(ctx, identityID, "owner", organization.ID)
+		_ = s.store.DeleteOrganization(ctx, organization.ID)
+		return nil, toStatusError(err)
+	}
 	return &organizationsv1.CreateOrganizationResponse{Organization: toProtoOrganization(organization)}, nil
 }
 
