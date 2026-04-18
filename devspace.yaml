@@ -2,32 +2,38 @@ version: v2beta1
 
 vars:
   ORGANIZATIONS_NAMESPACE: platform
+  ORGANIZATIONS_ARGOCD_APP: tenants
+  ORGANIZATIONS_DEPLOYMENT_NAME: tenants
+  ORGANIZATIONS_SERVICE_NAME: tenants
+  ORGANIZATIONS_RELEASE_NAME: tenants
+  ORGANIZATIONS_APP_NAME: organizations
+  ORGANIZATIONS_CONTAINER_NAME: organizations
   E2E_IMAGE: ghcr.io/agynio/devcontainer-go:1
 
 functions:
   disable_argocd_sync: |-
-    if kubectl get application organizations -n argocd >/dev/null 2>&1; then
-      echo "Disabling ArgoCD auto-sync for organizations..."
-      kubectl patch application organizations -n argocd \
+    if kubectl get application ${ORGANIZATIONS_ARGOCD_APP} -n argocd >/dev/null 2>&1; then
+      echo "Disabling ArgoCD auto-sync for ${ORGANIZATIONS_ARGOCD_APP}..."
+      kubectl patch application ${ORGANIZATIONS_ARGOCD_APP} -n argocd \
         --type merge \
         -p '{"spec":{"syncPolicy":{"automated":null}}}'
       echo "ArgoCD auto-sync disabled."
     else
-      echo "WARNING: ArgoCD Application 'organizations' not found in argocd namespace."
+      echo "WARNING: ArgoCD Application '${ORGANIZATIONS_ARGOCD_APP}' not found in argocd namespace."
     fi
   restore_argocd_sync: &restore_argocd_sync |-
-    if kubectl get application organizations -n argocd >/dev/null 2>&1; then
-      echo "Re-enabling ArgoCD auto-sync for organizations..."
-      kubectl patch application organizations -n argocd \
+    if kubectl get application ${ORGANIZATIONS_ARGOCD_APP} -n argocd >/dev/null 2>&1; then
+      echo "Re-enabling ArgoCD auto-sync for ${ORGANIZATIONS_ARGOCD_APP}..."
+      kubectl patch application ${ORGANIZATIONS_ARGOCD_APP} -n argocd \
         --type merge \
         -p '{"spec":{"syncPolicy":{"automated":{"prune":true,"selfHeal":true}}}}'
       echo "ArgoCD auto-sync restored."
     else
-      echo "WARNING: ArgoCD Application 'organizations' not found in argocd namespace."
+      echo "WARNING: ArgoCD Application '${ORGANIZATIONS_ARGOCD_APP}' not found in argocd namespace."
     fi
   patch_deployment: |-
-    echo "Patching organizations deployment for DevSpace..."
-    kubectl patch deployment organizations -n ${ORGANIZATIONS_NAMESPACE} --type strategic --patch "$(cat <<'EOF'
+    echo "Patching ${ORGANIZATIONS_DEPLOYMENT_NAME} deployment for DevSpace..."
+    kubectl patch deployment ${ORGANIZATIONS_DEPLOYMENT_NAME} -n ${ORGANIZATIONS_NAMESPACE} --type strategic --patch "$(cat <<'EOF'
     spec:
       template:
         spec:
@@ -93,7 +99,7 @@ deployments:
           - image: ${E2E_IMAGE}
             env:
               - name: ORGANIZATIONS_ADDR
-                value: "organizations:50051"
+                value: "${ORGANIZATIONS_SERVICE_NAME}:50051"
             volumeMounts:
               - containerPath: /opt/app/data
                 volume:
@@ -121,10 +127,10 @@ pipelines:
         start_dev --disable-pod-replace organizations
       else
         start_dev --disable-pod-replace organizations
-        echo "Waiting for organizations to be healthy on :50051..."
+        echo "Waiting for ${ORGANIZATIONS_SERVICE_NAME} to be healthy on :50051..."
         healthy=false
         for i in $(seq 1 60); do
-          if exec_container --label-selector=app.kubernetes.io/name=organizations -n ${ORGANIZATIONS_NAMESPACE} -- bash -c 'nc -z localhost 50051 >/dev/null 2>&1 || (echo > /dev/tcp/localhost/50051) >/dev/null 2>&1'; then
+          if exec_container --label-selector=app.kubernetes.io/name=${ORGANIZATIONS_APP_NAME},app.kubernetes.io/instance=${ORGANIZATIONS_RELEASE_NAME} -n ${ORGANIZATIONS_NAMESPACE} -- bash -c 'nc -z localhost 50051 >/dev/null 2>&1 || (echo > /dev/tcp/localhost/50051) >/dev/null 2>&1'; then
             healthy=true
             break
           fi
@@ -143,8 +149,8 @@ pipelines:
       disable_argocd_sync
 
       # Update the deployment to use the freshly-built image (built and loaded in CI)
-      kubectl set image deployment/organizations organizations=ghcr.io/agynio/organizations:e2e-test -n ${ORGANIZATIONS_NAMESPACE}
-      kubectl rollout status deployment/organizations -n ${ORGANIZATIONS_NAMESPACE} --timeout=120s
+      kubectl set image deployment/${ORGANIZATIONS_DEPLOYMENT_NAME} ${ORGANIZATIONS_CONTAINER_NAME}=ghcr.io/agynio/organizations:e2e-test -n ${ORGANIZATIONS_NAMESPACE}
+      kubectl rollout status deployment/${ORGANIZATIONS_DEPLOYMENT_NAME} -n ${ORGANIZATIONS_NAMESPACE} --timeout=120s
 
       create_deployments e2e-runner
       start_dev e2e-runner &
@@ -197,8 +203,8 @@ dev:
   organizations:
     namespace: ${ORGANIZATIONS_NAMESPACE}
     labelSelector:
-      app.kubernetes.io/name: organizations
-      app.kubernetes.io/instance: organizations
+      app.kubernetes.io/name: ${ORGANIZATIONS_APP_NAME}
+      app.kubernetes.io/instance: ${ORGANIZATIONS_RELEASE_NAME}
     containers:
       organizations:
         container: organizations
