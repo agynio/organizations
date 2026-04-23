@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log"
 	"strings"
 
 	authorizationv1 "github.com/agynio/organizations/.gen/go/agynio/api/authorization/v1"
@@ -157,7 +158,9 @@ func (s *Server) CreateOrganization(ctx context.Context, req *organizationsv1.Cr
 		_ = s.store.DeleteOrganization(ctx, organization.ID)
 		return nil, toStatusError(err)
 	}
-	s.seedDefaultNickname(ctx, organization.ID, identityID)
+	if err := s.seedDefaultNickname(ctx, organization.ID, identityID); err != nil {
+		log.Printf("seed default nickname failed (org=%s identity=%s): %v", organization.ID, identityID, err)
+	}
 	return &organizationsv1.CreateOrganizationResponse{Organization: toProtoOrganization(organization)}, nil
 }
 

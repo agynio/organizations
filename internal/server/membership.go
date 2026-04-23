@@ -3,6 +3,8 @@ package server
 import (
 	"context"
 	"errors"
+	"fmt"
+	"log"
 	"time"
 
 	authorizationv1 "github.com/agynio/organizations/.gen/go/agynio/api/authorization/v1"
@@ -80,7 +82,9 @@ func (s *Server) CreateMembership(ctx context.Context, req *organizationsv1.Crea
 			_ = s.store.DeleteMembership(ctx, membership.ID)
 			return nil, status.Errorf(codes.Internal, "failed to write membership tuple: %v", err)
 		}
-		s.seedDefaultNickname(ctx, membership.OrganizationID, membership.IdentityID)
+		if err := s.seedDefaultNickname(ctx, membership.OrganizationID, membership.IdentityID); err != nil {
+			log.Printf("seed default nickname failed (org=%s identity=%s): %v", membership.OrganizationID, membership.IdentityID, err)
+		}
 	}
 
 	return &organizationsv1.CreateMembershipResponse{Membership: toProtoMembership(membership)}, nil
@@ -117,7 +121,9 @@ func (s *Server) AcceptMembership(ctx context.Context, req *organizationsv1.Acce
 		_, _ = s.store.UpdateMembershipStatus(ctx, updated.ID, store.MembershipStatusPending)
 		return nil, status.Errorf(codes.Internal, "failed to write membership tuple: %v", err)
 	}
-	s.seedDefaultNickname(ctx, updated.OrganizationID, updated.IdentityID)
+	if err := s.seedDefaultNickname(ctx, updated.OrganizationID, updated.IdentityID); err != nil {
+		log.Printf("seed default nickname failed (org=%s identity=%s): %v", updated.OrganizationID, updated.IdentityID, err)
+	}
 
 	return &organizationsv1.AcceptMembershipResponse{Membership: toProtoMembership(updated)}, nil
 }
@@ -361,18 +367,21 @@ func (s *Server) ensureIdentityExists(ctx context.Context, identityID uuid.UUID)
 	return status.Errorf(codes.Internal, "identity lookup failed: %v", err)
 }
 
-func (s *Server) seedDefaultNickname(ctx context.Context, organizationID uuid.UUID, identityID uuid.UUID) {
+func (s *Server) seedDefaultNickname(ctx context.Context, organizationID uuid.UUID, identityID uuid.UUID) error {
 	identityType, err := s.identityClient.GetIdentityType(ctx, &identityv1.GetIdentityTypeRequest{IdentityId: identityID.String()})
 	if err != nil {
-		return
+		return fmt.Errorf("get identity type: %w", err)
 	}
 	if identityType.GetIdentityType() != identityv1.IdentityType_IDENTITY_TYPE_USER {
-		return
+		return nil
 	}
 
-	username := s.fetchUsername(ctx, identityID)
+	username, err := s.fetchUsername(ctx, identityID)
+	if err != nil {
+		return fmt.Errorf("fetch username: %w", err)
+	}
 	if username == "" {
-		return
+		return nil
 	}
 	_, err = s.identityClient.SetNickname(ctx, &identityv1.SetNicknameRequest{
 		OrganizationId: organizationID.String(),
@@ -381,19 +390,21 @@ func (s *Server) seedDefaultNickname(ctx context.Context, organizationID uuid.UU
 	})
 	if err != nil {
 		if statusErr, ok := status.FromError(err); ok && statusErr.Code() == codes.AlreadyExists {
-			return
+			return nil
 		}
+		return fmt.Errorf("set nickname: %w", err)
 	}
+	return nil
 }
 
-func (s *Server) fetchUsername(ctx context.Context, identityID uuid.UUID) string {
+func (s *Server) fetchUsername(ctx context.Context, identityID uuid.UUID) (string, error) {
 	response, err := s.usersClient.BatchGetUsers(ctx, &usersv1.BatchGetUsersRequest{IdentityIds: []string{identityID.String()}})
 	if err != nil {
-		return ""
+		return "", err
 	}
 	users := response.GetUsers()
 	if len(users) == 0 {
-		return ""
+		return "", nil
 	}
-	return users[0].GetUsername()
+	return users[0].GetUsername(), nil
 }
