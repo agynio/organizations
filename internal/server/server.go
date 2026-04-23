@@ -4,11 +4,13 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log"
 	"strings"
 
 	authorizationv1 "github.com/agynio/organizations/.gen/go/agynio/api/authorization/v1"
 	identityv1 "github.com/agynio/organizations/.gen/go/agynio/api/identity/v1"
 	organizationsv1 "github.com/agynio/organizations/.gen/go/agynio/api/organizations/v1"
+	usersv1 "github.com/agynio/organizations/.gen/go/agynio/api/users/v1"
 	"github.com/agynio/organizations/internal/store"
 	"github.com/google/uuid"
 	"google.golang.org/grpc/codes"
@@ -27,14 +29,21 @@ type Server struct {
 	store               *store.Store
 	authorizationClient authorizationv1.AuthorizationServiceClient
 	identityClient      identityv1.IdentityServiceClient
+	usersClient         usersv1.UsersServiceClient
 }
 
 func New(
 	store *store.Store,
 	authorizationClient authorizationv1.AuthorizationServiceClient,
 	identityClient identityv1.IdentityServiceClient,
+	usersClient usersv1.UsersServiceClient,
 ) *Server {
-	return &Server{store: store, authorizationClient: authorizationClient, identityClient: identityClient}
+	return &Server{
+		store:               store,
+		authorizationClient: authorizationClient,
+		identityClient:      identityClient,
+		usersClient:         usersClient,
+	}
 }
 
 func identityIDFromContext(ctx context.Context) (uuid.UUID, error) {
@@ -148,6 +157,9 @@ func (s *Server) CreateOrganization(ctx context.Context, req *organizationsv1.Cr
 		_ = s.deleteClusterTuple(ctx, "cluster", organization.ID)
 		_ = s.store.DeleteOrganization(ctx, organization.ID)
 		return nil, toStatusError(err)
+	}
+	if err := s.seedDefaultNickname(ctx, organization.ID, identityID); err != nil {
+		log.Printf("seed default nickname failed (org=%s identity=%s): %v", organization.ID, identityID, err)
 	}
 	return &organizationsv1.CreateOrganizationResponse{Organization: toProtoOrganization(organization)}, nil
 }
