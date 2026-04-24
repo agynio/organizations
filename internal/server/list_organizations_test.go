@@ -146,3 +146,40 @@ func TestListOrganizationsNonAdminDenied(t *testing.T) {
 		t.Fatalf("expected PermissionDenied, got %s", statusErr.Code())
 	}
 }
+
+func TestListOrganizationsNoIdentityAllowed(t *testing.T) {
+	organizationID := uuid.New()
+	createdAt := time.Now().UTC()
+	updatedAt := createdAt.Add(2 * time.Minute)
+	called := false
+
+	server := &Server{
+		listOrganizations: func(ctx context.Context, pageSize int32, cursor *store.PageCursor) (store.OrganizationListResult, error) {
+			called = true
+			return store.OrganizationListResult{
+				Organizations: []store.Organization{
+					{
+						ID:        organizationID,
+						Name:      "Acme Corp",
+						CreatedAt: createdAt,
+						UpdatedAt: updatedAt,
+					},
+				},
+			}, nil
+		},
+	}
+
+	response, err := server.ListOrganizations(context.Background(), &organizationsv1.ListOrganizationsRequest{PageSize: 5})
+	if err != nil {
+		t.Fatalf("ListOrganizations returned error: %v", err)
+	}
+	if !called {
+		t.Fatal("expected listOrganizations to be called")
+	}
+	if len(response.Organizations) != 1 {
+		t.Fatalf("expected 1 organization, got %d", len(response.Organizations))
+	}
+	if response.Organizations[0].GetId() != organizationID.String() {
+		t.Fatalf("expected organization id %s, got %s", organizationID.String(), response.Organizations[0].GetId())
+	}
+}
