@@ -30,20 +30,25 @@ type Server struct {
 	authorizationClient authorizationv1.AuthorizationServiceClient
 	identityClient      identityv1.IdentityServiceClient
 	usersClient         usersv1.UsersServiceClient
+	listOrganizations   func(context.Context, int32, *store.PageCursor) (store.OrganizationListResult, error)
 }
 
 func New(
-	store *store.Store,
+	organizationStore *store.Store,
 	authorizationClient authorizationv1.AuthorizationServiceClient,
 	identityClient identityv1.IdentityServiceClient,
 	usersClient usersv1.UsersServiceClient,
 ) *Server {
-	return &Server{
-		store:               store,
+	server := &Server{
+		store:               organizationStore,
 		authorizationClient: authorizationClient,
 		identityClient:      identityClient,
 		usersClient:         usersClient,
 	}
+	server.listOrganizations = func(ctx context.Context, pageSize int32, cursor *store.PageCursor) (store.OrganizationListResult, error) {
+		return organizationStore.ListOrganizations(ctx, store.OrganizationFilter{}, pageSize, cursor)
+	}
+	return server
 }
 
 func identityIDFromContext(ctx context.Context) (uuid.UUID, error) {
@@ -64,6 +69,20 @@ func (s *Server) checkPermission(ctx context.Context, identityID uuid.UUID, rela
 			User:     fmt.Sprintf("%s%s", identityObjectPrefix, identityID.String()),
 			Relation: relation,
 			Object:   fmt.Sprintf("%s%s", organizationObjectPrefix, organizationID.String()),
+		},
+	})
+	if err != nil {
+		return false, err
+	}
+	return response.GetAllowed(), nil
+}
+
+func (s *Server) isClusterAdmin(ctx context.Context, identityID uuid.UUID) (bool, error) {
+	response, err := s.authorizationClient.Check(ctx, &authorizationv1.CheckRequest{
+		TupleKey: &authorizationv1.TupleKey{
+			User:     fmt.Sprintf("%s%s", identityObjectPrefix, identityID.String()),
+			Relation: "admin",
+			Object:   clusterObject,
 		},
 	})
 	if err != nil {
@@ -210,11 +229,30 @@ func (s *Server) DeleteOrganization(ctx context.Context, req *organizationsv1.De
 }
 
 func (s *Server) ListOrganizations(ctx context.Context, req *organizationsv1.ListOrganizationsRequest) (*organizationsv1.ListOrganizationsResponse, error) {
+	identityID, err := identityIDFromContext(ctx)
+	if err != nil {
+		return nil, status.Errorf(codes.Unauthenticated, "identity not available: %v", err)
+	}
+
+	allowed, err := s.isClusterAdmin(ctx, identityID)
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "authorization check: %v", err)
+	}
+	if !allowed {
+		return nil, status.Error(codes.PermissionDenied, "missing permission to list organizations")
+	}
+
 	cursor, err := decodePageCursor(req.GetPageToken())
 	if err != nil {
 		return nil, status.Errorf(codes.InvalidArgument, "invalid page_token: %v", err)
 	}
-	result, err := s.store.ListOrganizations(ctx, store.OrganizationFilter{}, req.GetPageSize(), cursor)
+	listOrganizations := s.listOrganizations
+	if listOrganizations == nil {
+		listOrganizations = func(ctx context.Context, pageSize int32, cursor *store.PageCursor) (store.OrganizationListResult, error) {
+			return s.store.ListOrganizations(ctx, store.OrganizationFilter{}, pageSize, cursor)
+		}
+	}
+	result, err := listOrganizations(ctx, req.GetPageSize(), cursor)
 	if err != nil {
 		return nil, toStatusError(err)
 	}
