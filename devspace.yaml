@@ -52,9 +52,9 @@ functions:
                   done
                   echo "Files synced, generating protobuf types..."
                   buf generate buf.build/agynio/api --path agynio/api/organizations/v1 --path agynio/api/authorization/v1 --path agynio/api/identity/v1 --path agynio/api/users/v1
-                  echo "buf generate complete, starting organizations..."
+                  echo "buf generate complete, waiting for DevSpace sync to finish..."
                   export GOTOOLCHAIN=local
-                  exec go run ./cmd/organizations-service
+                  tail -f /dev/null
               volumeMounts:
                 - name: data
                   mountPath: /opt/app/data
@@ -94,6 +94,12 @@ pipelines:
         start_dev --disable-pod-replace organizations
       else
         start_dev --disable-pod-replace organizations
+        echo "Starting organizations service from synced source..."
+        exec_container --label-selector=app.kubernetes.io/name=organizations -n ${ORGANIZATIONS_NAMESPACE} -- bash -lc 'set -euo pipefail
+          cd /opt/app/data
+          export GOTOOLCHAIN=local
+          nohup go run ./cmd/organizations-service >/tmp/organizations-service.log 2>&1 &
+        '
         echo "Waiting for organizations to be healthy on :50051..."
         healthy=false
         for i in $(seq 1 60); do
@@ -104,6 +110,7 @@ pipelines:
           sleep 2
         done
         if [ "$healthy" != "true" ]; then
+          exec_container --label-selector=app.kubernetes.io/name=organizations -n ${ORGANIZATIONS_NAMESPACE} -- bash -lc 'cat /tmp/organizations-service.log >&2' || true
           echo "ERROR: Organizations did not become healthy within 120s" >&2
           exit 1
         fi
