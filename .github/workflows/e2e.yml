@@ -33,4 +33,4 @@ jobs:
         uses: agynio/e2e/.github/actions/run-tests@09e3819e85d9052c7fad93140568296866525d0d
         with:
           service: organizations
-          ref: 2b484be61b150a555cbdc15866f3a2e51ca2de08
+          ref: 361d1016f3fc6de09e3ae66bb4a56652822a0e38
