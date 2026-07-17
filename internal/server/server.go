@@ -202,6 +202,11 @@ func (s *Server) GetOrganization(ctx context.Context, req *organizationsv1.GetOr
 }
 
 func (s *Server) UpdateOrganization(ctx context.Context, req *organizationsv1.UpdateOrganizationRequest) (*organizationsv1.UpdateOrganizationResponse, error) {
+	identityID, err := identityIDFromContext(ctx)
+	if err != nil {
+		return nil, status.Errorf(codes.Unauthenticated, "identity not available: %v", err)
+	}
+
 	id, err := parseUUID(req.GetId())
 	if err != nil {
 		return nil, status.Errorf(codes.InvalidArgument, "id: %v", err)
@@ -209,18 +214,12 @@ func (s *Server) UpdateOrganization(ctx context.Context, req *organizationsv1.Up
 	if req.Name == nil && req.SandboxDefaultIdleTimeout == nil && req.SandboxDefaultTtl == nil {
 		return nil, status.Error(codes.InvalidArgument, "at least one field must be provided")
 	}
-	if req.SandboxDefaultIdleTimeout != nil || req.SandboxDefaultTtl != nil {
-		identityID, err := identityIDFromContext(ctx)
-		if err != nil {
-			return nil, status.Errorf(codes.Unauthenticated, "identity not available: %v", err)
-		}
-		allowed, err := s.checkPermission(ctx, identityID, "owner", id)
-		if err != nil {
-			return nil, status.Errorf(codes.Internal, "authorization check: %v", err)
-		}
-		if !allowed {
-			return nil, status.Error(codes.PermissionDenied, "missing permission to update organization sandbox settings")
-		}
+	allowed, err := s.checkPermission(ctx, identityID, "owner", id)
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "authorization check: %v", err)
+	}
+	if !allowed {
+		return nil, status.Error(codes.PermissionDenied, "missing permission to update organization")
 	}
 
 	update := store.OrganizationUpdate{}

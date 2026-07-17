@@ -106,7 +106,11 @@ func TestUpdateOrganizationRejectsInvalidSandboxSettings(t *testing.T) {
 	}
 }
 
-func TestUpdateOrganizationNameOnlyPreservesLegacyUnauthenticatedPath(t *testing.T) {
+func TestUpdateOrganizationNameOnlyRequiresOwner(t *testing.T) {
+	authClient, authServer, cleanup := setupAuthClient(t, true)
+	defer cleanup()
+
+	identityID := uuid.New()
 	organizationID := uuid.New()
 	name := "Acme Updated"
 	updated := store.Organization{
@@ -120,6 +124,7 @@ func TestUpdateOrganizationNameOnlyPreservesLegacyUnauthenticatedPath(t *testing
 	called := false
 
 	server := &Server{
+		authorizationClient: authClient,
 		updateOrganization: func(ctx context.Context, id uuid.UUID, update store.OrganizationUpdate) (store.Organization, error) {
 			called = true
 			if id != organizationID {
@@ -135,7 +140,8 @@ func TestUpdateOrganizationNameOnlyPreservesLegacyUnauthenticatedPath(t *testing
 		},
 	}
 
-	response, err := server.UpdateOrganization(context.Background(), &organizationsv1.UpdateOrganizationRequest{
+	ctx := metadata.NewIncomingContext(context.Background(), metadata.Pairs("x-identity-id", identityID.String()))
+	response, err := server.UpdateOrganization(ctx, &organizationsv1.UpdateOrganizationRequest{
 		Id:   organizationID.String(),
 		Name: &name,
 	})
@@ -147,6 +153,35 @@ func TestUpdateOrganizationNameOnlyPreservesLegacyUnauthenticatedPath(t *testing
 	}
 	if response.GetOrganization().GetName() != name {
 		t.Fatalf("expected name %q, got %q", name, response.GetOrganization().GetName())
+	}
+
+	authServer.requestLock.Lock()
+	request := authServer.lastRequest
+	authServer.requestLock.Unlock()
+	if request == nil || request.GetTupleKey() == nil {
+		t.Fatal("expected authorization check request")
+	}
+	if request.GetTupleKey().GetRelation() != "owner" {
+		t.Fatalf("expected owner relation, got %s", request.GetTupleKey().GetRelation())
+	}
+}
+
+func TestUpdateOrganizationNameOnlyRequiresIdentity(t *testing.T) {
+	organizationID := uuid.New()
+	name := "Acme Updated"
+	server := &Server{
+		updateOrganization: func(ctx context.Context, id uuid.UUID, update store.OrganizationUpdate) (store.Organization, error) {
+			t.Fatal("updateOrganization should not be called without identity")
+			return store.Organization{}, nil
+		},
+	}
+
+	_, err := server.UpdateOrganization(context.Background(), &organizationsv1.UpdateOrganizationRequest{
+		Id:   organizationID.String(),
+		Name: &name,
+	})
+	if status.Code(err) != codes.Unauthenticated {
+		t.Fatalf("expected Unauthenticated, got %v", err)
 	}
 }
 
