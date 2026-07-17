@@ -185,6 +185,25 @@ func TestUpdateOrganizationNameOnlyRequiresIdentity(t *testing.T) {
 	}
 }
 
+func TestUpdateOrganizationEmptyUpdateRequiresOwner(t *testing.T) {
+	authClient, _, cleanup := setupAuthClient(t, true)
+	defer cleanup()
+
+	server := &Server{
+		authorizationClient: authClient,
+		updateOrganization: func(ctx context.Context, id uuid.UUID, update store.OrganizationUpdate) (store.Organization, error) {
+			t.Fatal("updateOrganization should not be called for empty update")
+			return store.Organization{}, nil
+		},
+	}
+
+	ctx := metadata.NewIncomingContext(context.Background(), metadata.Pairs("x-identity-id", uuid.NewString()))
+	_, err := server.UpdateOrganization(ctx, &organizationsv1.UpdateOrganizationRequest{Id: uuid.NewString()})
+	if status.Code(err) != codes.InvalidArgument {
+		t.Fatalf("expected InvalidArgument, got %v", err)
+	}
+}
+
 func TestUpdateOrganizationRequiresOwner(t *testing.T) {
 	authClient, _, cleanup := setupAuthClient(t, false)
 	defer cleanup()

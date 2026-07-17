@@ -211,15 +211,15 @@ func (s *Server) UpdateOrganization(ctx context.Context, req *organizationsv1.Up
 	if err != nil {
 		return nil, status.Errorf(codes.InvalidArgument, "id: %v", err)
 	}
-	if req.Name == nil && req.SandboxDefaultIdleTimeout == nil && req.SandboxDefaultTtl == nil {
-		return nil, status.Error(codes.InvalidArgument, "at least one field must be provided")
-	}
 	allowed, err := s.checkPermission(ctx, identityID, "owner", id)
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, "authorization check: %v", err)
 	}
 	if !allowed {
 		return nil, status.Error(codes.PermissionDenied, "missing permission to update organization")
+	}
+	if req.Name == nil && req.SandboxDefaultIdleTimeout == nil && req.SandboxDefaultTtl == nil {
+		return nil, status.Error(codes.InvalidArgument, "at least one field must be provided")
 	}
 
 	update := store.OrganizationUpdate{}
