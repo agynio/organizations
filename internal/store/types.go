@@ -7,10 +7,12 @@ import (
 )
 
 type Organization struct {
-	ID        uuid.UUID
-	Name      string
-	CreatedAt time.Time
-	UpdatedAt time.Time
+	ID                        uuid.UUID
+	Name                      string
+	SandboxDefaultIdleTimeout string
+	SandboxDefaultTTL         string
+	CreatedAt                 time.Time
+	UpdatedAt                 time.Time
 }
 
 type OrganizationInput struct {
@@ -18,7 +20,9 @@ type OrganizationInput struct {
 }
 
 type OrganizationUpdate struct {
-	Name *string
+	Name                      *string
+	SandboxDefaultIdleTimeout *string
+	SandboxDefaultTTL         *string
 }
 
 type OrganizationFilter struct{}
