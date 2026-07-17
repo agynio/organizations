@@ -10,10 +10,12 @@ import (
 
 func toProtoOrganization(organization store.Organization) *organizationsv1.Organization {
 	return &organizationsv1.Organization{
-		Id:        organization.ID.String(),
-		Name:      organization.Name,
-		CreatedAt: timestamppb.New(organization.CreatedAt),
-		UpdatedAt: timestamppb.New(organization.UpdatedAt),
+		Id:                        organization.ID.String(),
+		Name:                      organization.Name,
+		CreatedAt:                 timestamppb.New(organization.CreatedAt),
+		UpdatedAt:                 timestamppb.New(organization.UpdatedAt),
+		SandboxDefaultIdleTimeout: organization.SandboxDefaultIdleTimeout,
+		SandboxDefaultTtl:         organization.SandboxDefaultTTL,
 	}
 }
 

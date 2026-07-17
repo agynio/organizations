@@ -31,6 +31,7 @@ type Server struct {
 	identityClient      identityv1.IdentityServiceClient
 	usersClient         usersv1.UsersServiceClient
 	listOrganizations   func(context.Context, int32, *store.PageCursor) (store.OrganizationListResult, error)
+	updateOrganization  func(context.Context, uuid.UUID, store.OrganizationUpdate) (store.Organization, error)
 }
 
 func New(
@@ -48,6 +49,7 @@ func New(
 	server.listOrganizations = func(ctx context.Context, pageSize int32, cursor *store.PageCursor) (store.OrganizationListResult, error) {
 		return organizationStore.ListOrganizations(ctx, store.OrganizationFilter{}, pageSize, cursor)
 	}
+	server.updateOrganization = organizationStore.UpdateOrganization
 	return server
 }
 
@@ -200,12 +202,24 @@ func (s *Server) GetOrganization(ctx context.Context, req *organizationsv1.GetOr
 }
 
 func (s *Server) UpdateOrganization(ctx context.Context, req *organizationsv1.UpdateOrganizationRequest) (*organizationsv1.UpdateOrganizationResponse, error) {
+	identityID, err := identityIDFromContext(ctx)
+	if err != nil {
+		return nil, status.Errorf(codes.Unauthenticated, "identity not available: %v", err)
+	}
+
 	id, err := parseUUID(req.GetId())
 	if err != nil {
 		return nil, status.Errorf(codes.InvalidArgument, "id: %v", err)
 	}
-	if req.Name == nil {
+	if req.Name == nil && req.SandboxDefaultIdleTimeout == nil && req.SandboxDefaultTtl == nil {
 		return nil, status.Error(codes.InvalidArgument, "at least one field must be provided")
+	}
+	allowed, err := s.checkPermission(ctx, identityID, "owner", id)
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "authorization check: %v", err)
+	}
+	if !allowed {
+		return nil, status.Error(codes.PermissionDenied, "missing permission to update organization")
 	}
 
 	update := store.OrganizationUpdate{}
@@ -213,8 +227,26 @@ func (s *Server) UpdateOrganization(ctx context.Context, req *organizationsv1.Up
 		value := req.GetName()
 		update.Name = &value
 	}
+	if req.SandboxDefaultIdleTimeout != nil {
+		value, err := validateSandboxIdleTimeout(req.GetSandboxDefaultIdleTimeout())
+		if err != nil {
+			return nil, status.Errorf(codes.InvalidArgument, "sandbox_default_idle_timeout: %v", err)
+		}
+		update.SandboxDefaultIdleTimeout = &value
+	}
+	if req.SandboxDefaultTtl != nil {
+		value, err := validateSandboxTTL(req.GetSandboxDefaultTtl())
+		if err != nil {
+			return nil, status.Errorf(codes.InvalidArgument, "sandbox_default_ttl: %v", err)
+		}
+		update.SandboxDefaultTTL = &value
+	}
 
-	organization, err := s.store.UpdateOrganization(ctx, id, update)
+	updateOrganization := s.updateOrganization
+	if updateOrganization == nil {
+		updateOrganization = s.store.UpdateOrganization
+	}
+	organization, err := updateOrganization(ctx, id, update)
 	if err != nil {
 		return nil, toStatusError(err)
 	}
