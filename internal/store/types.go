@@ -9,6 +9,7 @@ import (
 type Organization struct {
 	ID                        uuid.UUID
 	Name                      string
+	Slug                      string
 	SandboxDefaultIdleTimeout string
 	SandboxDefaultTTL         string
 	CreatedAt                 time.Time
@@ -17,10 +18,12 @@ type Organization struct {
 
 type OrganizationInput struct {
 	Name string
+	Slug string
 }
 
 type OrganizationUpdate struct {
 	Name                      *string
+	Slug                      *string
 	SandboxDefaultIdleTimeout *string
 	SandboxDefaultTTL         *string
 }

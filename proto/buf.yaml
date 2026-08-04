@@ -1,0 +1,15 @@
+version: v2
+
+# Vendored copy of agynio/api/organizations/v1 carrying the slug field, so this
+# service builds before the change lands in buf.build/agynio/api. Delete this
+# directory and the `buf generate proto` step from the Dockerfile and
+# devspace.yaml once it is published there.
+modules:
+  - path: .
+
+lint:
+  use:
+    - STANDARD
+  except:
+    - RPC_REQUEST_RESPONSE_UNIQUE
+    - SERVICE_SUFFIX

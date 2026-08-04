@@ -12,6 +12,7 @@ func toProtoOrganization(organization store.Organization) *organizationsv1.Organ
 	return &organizationsv1.Organization{
 		Id:                        organization.ID.String(),
 		Name:                      organization.Name,
+		Slug:                      organization.Slug,
 		CreatedAt:                 timestamppb.New(organization.CreatedAt),
 		UpdatedAt:                 timestamppb.New(organization.UpdatedAt),
 		SandboxDefaultIdleTimeout: organization.SandboxDefaultIdleTimeout,

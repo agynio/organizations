@@ -1,2 +1,6 @@
 .gen/
 agynio/
+
+# The vendored proto copy is temporary but must be tracked; the broad
+# agynio/ rule above is meant for generated output.
+!proto/agynio/

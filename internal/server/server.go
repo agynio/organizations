@@ -155,7 +155,12 @@ func (s *Server) CreateOrganization(ctx context.Context, req *organizationsv1.Cr
 		return nil, status.Errorf(codes.Unauthenticated, "identity not available: %v", err)
 	}
 
-	organization, err := s.store.CreateOrganization(ctx, store.OrganizationInput{Name: req.GetName()})
+	slug, err := s.resolveSlug(ctx, req.GetSlug(), req.GetName())
+	if err != nil {
+		return nil, err
+	}
+
+	organization, err := s.store.CreateOrganization(ctx, store.OrganizationInput{Name: req.GetName(), Slug: slug})
 	if err != nil {
 		return nil, toStatusError(err)
 	}
@@ -201,6 +206,21 @@ func (s *Server) GetOrganization(ctx context.Context, req *organizationsv1.GetOr
 	return &organizationsv1.GetOrganizationResponse{Organization: toProtoOrganization(organization)}, nil
 }
 
+// GetOrganizationBySlug is internal: the Image Proxy resolves the slug in a
+// reference path before asking the catalog for the image, and holds no tuples a
+// permission check could pass.
+func (s *Server) GetOrganizationBySlug(ctx context.Context, req *organizationsv1.GetOrganizationBySlugRequest) (*organizationsv1.GetOrganizationBySlugResponse, error) {
+	slug, err := validateSlug(req.GetSlug())
+	if err != nil {
+		return nil, err
+	}
+	organization, err := s.store.GetOrganizationBySlug(ctx, slug)
+	if err != nil {
+		return nil, toStatusError(err)
+	}
+	return &organizationsv1.GetOrganizationBySlugResponse{Organization: toProtoOrganization(organization)}, nil
+}
+
 func (s *Server) UpdateOrganization(ctx context.Context, req *organizationsv1.UpdateOrganizationRequest) (*organizationsv1.UpdateOrganizationResponse, error) {
 	identityID, err := identityIDFromContext(ctx)
 	if err != nil {
@@ -218,7 +238,7 @@ func (s *Server) UpdateOrganization(ctx context.Context, req *organizationsv1.Up
 	if !allowed {
 		return nil, status.Error(codes.PermissionDenied, "missing permission to update organization")
 	}
-	if req.Name == nil && req.SandboxDefaultIdleTimeout == nil && req.SandboxDefaultTtl == nil {
+	if req.Name == nil && req.Slug == nil && req.SandboxDefaultIdleTimeout == nil && req.SandboxDefaultTtl == nil {
 		return nil, status.Error(codes.InvalidArgument, "at least one field must be provided")
 	}
 
@@ -226,6 +246,15 @@ func (s *Server) UpdateOrganization(ctx context.Context, req *organizationsv1.Up
 	if req.Name != nil {
 		value := req.GetName()
 		update.Name = &value
+	}
+	if req.Slug != nil {
+		// A rename is deliberate and visible: app addresses and image proxy
+		// references change with it, costing a one-time node cache miss.
+		value, err := validateSlug(req.GetSlug())
+		if err != nil {
+			return nil, err
+		}
+		update.Slug = &value
 	}
 	if req.SandboxDefaultIdleTimeout != nil {
 		value, err := validateSandboxIdleTimeout(req.GetSandboxDefaultIdleTimeout())
