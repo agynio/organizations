@@ -30,7 +30,7 @@ jobs:
         run: devspace dev
 
       - name: Run E2E tests
-        uses: agynio/e2e/.github/actions/run-tests@main
+        uses: agynio/e2e/.github/actions/run-tests@09e3819e85d9052c7fad93140568296866525d0d
         with:
           service: organizations
           ref: b421a4fb6affefaf83b2d9ae8a18ae92451f267a
