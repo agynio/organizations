@@ -1,0 +1,34 @@
+{{- if .Values.internalAuthorizationPolicy.enabled }}
+{{- $namespace := .Release.Namespace }}
+# RegisterPlatformOrganization creates an organization with no user behind it,
+# and GetOrganizationBySlug resolves a reference path without one. Neither
+# carries an identity a permission check could refuse, so who may reach them at
+# all is settled here.
+apiVersion: security.istio.io/v1beta1
+kind: AuthorizationPolicy
+metadata:
+  name: {{ .Release.Name }}-internal-organizations
+  labels:
+    app.kubernetes.io/name: {{ include "service-base.name" . }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: {{ include "service-base.name" . }}
+      app.kubernetes.io/instance: {{ .Release.Name }}
+  action: DENY
+  rules:
+    - from:
+        - source:
+            notPrincipals:
+{{- range .Values.internalAuthorizationPolicy.serviceAccounts }}
+              - "cluster.local/ns/{{ .namespace | default $namespace }}/sa/{{ .name }}"
+{{- end }}
+      to:
+        - operation:
+            methods:
+              - POST
+            paths:
+              - /agynio.api.organizations.v1.OrganizationsService/RegisterPlatformOrganization
+              - /agynio.api.organizations.v1.OrganizationsService/GetOrganizationBySlug
+{{- end }}

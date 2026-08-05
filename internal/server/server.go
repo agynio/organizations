@@ -155,7 +155,12 @@ func (s *Server) CreateOrganization(ctx context.Context, req *organizationsv1.Cr
 		return nil, status.Errorf(codes.Unauthenticated, "identity not available: %v", err)
 	}
 
-	organization, err := s.store.CreateOrganization(ctx, store.OrganizationInput{Name: req.GetName()})
+	slug, err := s.resolveSlug(ctx, req.GetSlug(), req.GetName())
+	if err != nil {
+		return nil, err
+	}
+
+	organization, err := s.store.CreateOrganization(ctx, store.OrganizationInput{Name: req.GetName(), Slug: slug})
 	if err != nil {
 		return nil, toStatusError(err)
 	}
@@ -201,6 +206,80 @@ func (s *Server) GetOrganization(ctx context.Context, req *organizationsv1.GetOr
 	return &organizationsv1.GetOrganizationResponse{Organization: toProtoOrganization(organization)}, nil
 }
 
+// RegisterPlatformOrganization creates the organization platform-shipped
+// resources live in when nothing holds that slug, and returns the existing one
+// otherwise. Create-if-absent is what makes re-running an upgrade safe: an
+// operator who renamed it keeps the rename, and the platform does not fight
+// them for it on every release.
+//
+// It gets no members and no owner tuple. Cluster admins already hold
+// owner-level access to every organization, so it is administrable without
+// anyone being added to it, and no human identity has to be manufactured at
+// install time.
+func (s *Server) RegisterPlatformOrganization(ctx context.Context, req *organizationsv1.RegisterPlatformOrganizationRequest) (*organizationsv1.RegisterPlatformOrganizationResponse, error) {
+	slug, err := validateSlug(req.GetSlug())
+	if err != nil {
+		return nil, err
+	}
+	name := strings.TrimSpace(req.GetName())
+	if name == "" {
+		name = slug
+	}
+
+	existing, err := s.store.GetOrganizationBySlug(ctx, slug)
+	if err == nil {
+		return &organizationsv1.RegisterPlatformOrganizationResponse{
+			Organization: toProtoOrganization(existing),
+			Created:      false,
+		}, nil
+	}
+	var notFound *store.NotFoundError
+	if !errors.As(err, &notFound) {
+		return nil, toStatusError(err)
+	}
+
+	organization, err := s.store.CreateOrganization(ctx, store.OrganizationInput{Name: name, Slug: slug})
+	if err != nil {
+		// A concurrent provisioning run won the insert; returning its record
+		// keeps the call create-if-absent rather than failing the upgrade.
+		var exists *store.AlreadyExistsError
+		if errors.As(err, &exists) {
+			if raced, getErr := s.store.GetOrganizationBySlug(ctx, slug); getErr == nil {
+				return &organizationsv1.RegisterPlatformOrganizationResponse{
+					Organization: toProtoOrganization(raced),
+					Created:      false,
+				}, nil
+			}
+		}
+		return nil, toStatusError(err)
+	}
+
+	if err := s.writeClusterTuple(ctx, "cluster", organization.ID); err != nil {
+		_ = s.store.DeleteOrganization(ctx, organization.ID)
+		return nil, status.Errorf(codes.Internal, "failed to write cluster tuple: %v", err)
+	}
+
+	return &organizationsv1.RegisterPlatformOrganizationResponse{
+		Organization: toProtoOrganization(organization),
+		Created:      true,
+	}, nil
+}
+
+// GetOrganizationBySlug is internal: the Image Proxy resolves the slug in a
+// reference path before asking the catalog for the image, and holds no tuples a
+// permission check could pass.
+func (s *Server) GetOrganizationBySlug(ctx context.Context, req *organizationsv1.GetOrganizationBySlugRequest) (*organizationsv1.GetOrganizationBySlugResponse, error) {
+	slug, err := validateSlug(req.GetSlug())
+	if err != nil {
+		return nil, err
+	}
+	organization, err := s.store.GetOrganizationBySlug(ctx, slug)
+	if err != nil {
+		return nil, toStatusError(err)
+	}
+	return &organizationsv1.GetOrganizationBySlugResponse{Organization: toProtoOrganization(organization)}, nil
+}
+
 func (s *Server) UpdateOrganization(ctx context.Context, req *organizationsv1.UpdateOrganizationRequest) (*organizationsv1.UpdateOrganizationResponse, error) {
 	identityID, err := identityIDFromContext(ctx)
 	if err != nil {
@@ -218,7 +297,7 @@ func (s *Server) UpdateOrganization(ctx context.Context, req *organizationsv1.Up
 	if !allowed {
 		return nil, status.Error(codes.PermissionDenied, "missing permission to update organization")
 	}
-	if req.Name == nil && req.SandboxDefaultIdleTimeout == nil && req.SandboxDefaultTtl == nil {
+	if req.Name == nil && req.Slug == nil && req.SandboxDefaultIdleTimeout == nil && req.SandboxDefaultTtl == nil {
 		return nil, status.Error(codes.InvalidArgument, "at least one field must be provided")
 	}
 
@@ -226,6 +305,15 @@ func (s *Server) UpdateOrganization(ctx context.Context, req *organizationsv1.Up
 	if req.Name != nil {
 		value := req.GetName()
 		update.Name = &value
+	}
+	if req.Slug != nil {
+		// A rename is deliberate and visible: app addresses and image proxy
+		// references change with it, costing a one-time node cache miss.
+		value, err := validateSlug(req.GetSlug())
+		if err != nil {
+			return nil, err
+		}
+		update.Slug = &value
 	}
 	if req.SandboxDefaultIdleTimeout != nil {
 		value, err := validateSandboxIdleTimeout(req.GetSandboxDefaultIdleTimeout())

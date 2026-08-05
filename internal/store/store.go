@@ -11,7 +11,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-const organizationColumns = `id, name, sandbox_default_idle_timeout, sandbox_default_ttl, created_at, updated_at`
+const organizationColumns = `id, name, slug, sandbox_default_idle_timeout, sandbox_default_ttl, created_at, updated_at`
 
 type Store struct {
 	pool *pgxpool.Pool
@@ -26,6 +26,7 @@ func scanOrganization(row pgx.Row) (Organization, error) {
 	if err := row.Scan(
 		&organization.ID,
 		&organization.Name,
+		&organization.Slug,
 		&organization.SandboxDefaultIdleTimeout,
 		&organization.SandboxDefaultTTL,
 		&organization.CreatedAt,
@@ -38,13 +39,16 @@ func scanOrganization(row pgx.Row) (Organization, error) {
 
 func (s *Store) CreateOrganization(ctx context.Context, input OrganizationInput) (Organization, error) {
 	row := s.pool.QueryRow(ctx,
-		fmt.Sprintf(`INSERT INTO organizations (name)
-         VALUES ($1)
+		fmt.Sprintf(`INSERT INTO organizations (name, slug)
+         VALUES ($1, $2)
          RETURNING %s`, organizationColumns),
-		input.Name,
+		input.Name, input.Slug,
 	)
 	organization, err := scanOrganization(row)
 	if err != nil {
+		if isUniqueViolation(err) {
+			return Organization{}, AlreadyExists("organization slug")
+		}
 		return Organization{}, err
 	}
 	return organization, nil
@@ -65,10 +69,30 @@ func (s *Store) GetOrganization(ctx context.Context, id uuid.UUID) (Organization
 	return organization, nil
 }
 
+// GetOrganizationBySlug resolves the slug that appears in an app address and in
+// an image proxy reference.
+func (s *Store) GetOrganizationBySlug(ctx context.Context, slug string) (Organization, error) {
+	row := s.pool.QueryRow(ctx,
+		fmt.Sprintf(`SELECT %s FROM organizations WHERE slug = $1`, organizationColumns),
+		slug,
+	)
+	organization, err := scanOrganization(row)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return Organization{}, NotFound("organization")
+		}
+		return Organization{}, err
+	}
+	return organization, nil
+}
+
 func (s *Store) UpdateOrganization(ctx context.Context, id uuid.UUID, update OrganizationUpdate) (Organization, error) {
 	builder := updateBuilder{}
 	if update.Name != nil {
 		builder.add("name", *update.Name)
+	}
+	if update.Slug != nil {
+		builder.add("slug", *update.Slug)
 	}
 	if update.SandboxDefaultIdleTimeout != nil {
 		builder.add("sandbox_default_idle_timeout", *update.SandboxDefaultIdleTimeout)
@@ -86,6 +110,9 @@ func (s *Store) UpdateOrganization(ctx context.Context, id uuid.UUID, update Org
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return Organization{}, NotFound("organization")
+		}
+		if isUniqueViolation(err) {
+			return Organization{}, AlreadyExists("organization slug")
 		}
 		return Organization{}, err
 	}
