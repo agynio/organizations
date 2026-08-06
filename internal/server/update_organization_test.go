@@ -33,6 +33,14 @@ func TestUpdateOrganizationUpdatesSandboxSettings(t *testing.T) {
 
 	server := &Server{
 		authorizationClient: authClient,
+		getOrganization: func(ctx context.Context, id uuid.UUID) (store.Organization, error) {
+			return store.Organization{
+				ID:                        organizationID,
+				SandboxDefaultIdleTimeout: defaultSandboxIdleTimeout,
+				SandboxMaxIdleTimeout:     defaultSandboxMaxIdleTimeout,
+				SandboxDefaultTTL:         defaultSandboxTTL,
+			}, nil
+		},
 		updateOrganization: func(ctx context.Context, id uuid.UUID, update store.OrganizationUpdate) (store.Organization, error) {
 			called = true
 			if id != organizationID {

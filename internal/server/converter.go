@@ -16,6 +16,7 @@ func toProtoOrganization(organization store.Organization) *organizationsv1.Organ
 		CreatedAt:                 timestamppb.New(organization.CreatedAt),
 		UpdatedAt:                 timestamppb.New(organization.UpdatedAt),
 		SandboxDefaultIdleTimeout: organization.SandboxDefaultIdleTimeout,
+		SandboxMaxIdleTimeout:     organization.SandboxMaxIdleTimeout,
 		SandboxDefaultTtl:         organization.SandboxDefaultTTL,
 	}
 }
