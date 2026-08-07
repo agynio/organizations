@@ -11,7 +11,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-const organizationColumns = `id, name, slug, sandbox_default_idle_timeout, sandbox_default_ttl, created_at, updated_at`
+const organizationColumns = `id, name, slug, sandbox_default_idle_timeout, sandbox_max_idle_timeout, sandbox_default_ttl, created_at, updated_at`
 
 type Store struct {
 	pool *pgxpool.Pool
@@ -28,6 +28,7 @@ func scanOrganization(row pgx.Row) (Organization, error) {
 		&organization.Name,
 		&organization.Slug,
 		&organization.SandboxDefaultIdleTimeout,
+		&organization.SandboxMaxIdleTimeout,
 		&organization.SandboxDefaultTTL,
 		&organization.CreatedAt,
 		&organization.UpdatedAt,
@@ -96,6 +97,9 @@ func (s *Store) UpdateOrganization(ctx context.Context, id uuid.UUID, update Org
 	}
 	if update.SandboxDefaultIdleTimeout != nil {
 		builder.add("sandbox_default_idle_timeout", *update.SandboxDefaultIdleTimeout)
+	}
+	if update.SandboxMaxIdleTimeout != nil {
+		builder.add("sandbox_max_idle_timeout", *update.SandboxMaxIdleTimeout)
 	}
 	if update.SandboxDefaultTTL != nil {
 		builder.add("sandbox_default_ttl", *update.SandboxDefaultTTL)

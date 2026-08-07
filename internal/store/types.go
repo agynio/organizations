@@ -11,6 +11,7 @@ type Organization struct {
 	Name                      string
 	Slug                      string
 	SandboxDefaultIdleTimeout string
+	SandboxMaxIdleTimeout     string
 	SandboxDefaultTTL         string
 	CreatedAt                 time.Time
 	UpdatedAt                 time.Time
@@ -25,6 +26,7 @@ type OrganizationUpdate struct {
 	Name                      *string
 	Slug                      *string
 	SandboxDefaultIdleTimeout *string
+	SandboxMaxIdleTimeout     *string
 	SandboxDefaultTTL         *string
 }
 

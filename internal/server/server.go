@@ -32,6 +32,7 @@ type Server struct {
 	usersClient         usersv1.UsersServiceClient
 	listOrganizations   func(context.Context, int32, *store.PageCursor) (store.OrganizationListResult, error)
 	updateOrganization  func(context.Context, uuid.UUID, store.OrganizationUpdate) (store.Organization, error)
+	getOrganization     func(context.Context, uuid.UUID) (store.Organization, error)
 }
 
 func New(
@@ -297,7 +298,8 @@ func (s *Server) UpdateOrganization(ctx context.Context, req *organizationsv1.Up
 	if !allowed {
 		return nil, status.Error(codes.PermissionDenied, "missing permission to update organization")
 	}
-	if req.Name == nil && req.Slug == nil && req.SandboxDefaultIdleTimeout == nil && req.SandboxDefaultTtl == nil {
+	if req.Name == nil && req.Slug == nil && req.SandboxDefaultIdleTimeout == nil &&
+		req.SandboxMaxIdleTimeout == nil && req.SandboxDefaultTtl == nil {
 		return nil, status.Error(codes.InvalidArgument, "at least one field must be provided")
 	}
 
@@ -322,12 +324,37 @@ func (s *Server) UpdateOrganization(ctx context.Context, req *organizationsv1.Up
 		}
 		update.SandboxDefaultIdleTimeout = &value
 	}
+	if req.SandboxMaxIdleTimeout != nil {
+		value, err := validateSandboxIdleTimeout(req.GetSandboxMaxIdleTimeout())
+		if err != nil {
+			return nil, status.Errorf(codes.InvalidArgument, "sandbox_max_idle_timeout: %v", err)
+		}
+		update.SandboxMaxIdleTimeout = &value
+	}
 	if req.SandboxDefaultTtl != nil {
 		value, err := validateSandboxTTL(req.GetSandboxDefaultTtl())
 		if err != nil {
 			return nil, status.Errorf(codes.InvalidArgument, "sandbox_default_ttl: %v", err)
 		}
 		update.SandboxDefaultTTL = &value
+	}
+	if update.SandboxDefaultIdleTimeout != nil || update.SandboxMaxIdleTimeout != nil {
+		getOrganization := s.getOrganization
+		if getOrganization == nil {
+			getOrganization = s.store.GetOrganization
+		}
+		current, err := getOrganization(ctx, id)
+		if err != nil {
+			return nil, toStatusError(err)
+		}
+		if err := resolveSandboxIdleBounds(
+			current.SandboxDefaultIdleTimeout,
+			current.SandboxMaxIdleTimeout,
+			update.SandboxDefaultIdleTimeout,
+			update.SandboxMaxIdleTimeout,
+		); err != nil {
+			return nil, status.Error(codes.InvalidArgument, err.Error())
+		}
 	}
 
 	updateOrganization := s.updateOrganization
