@@ -177,17 +177,31 @@ func (s *Server) CreateOrganization(ctx context.Context, req *organizationsv1.Cr
 		return nil, status.Errorf(codes.Internal, "failed to write ownership tuple: %v", err)
 	}
 
-	_, err = s.store.CreateMembership(ctx, store.MembershipInput{
-		OrganizationID: organization.ID,
-		IdentityID:     identityID,
-		Role:           store.MembershipRoleOwner,
-		Status:         store.MembershipStatusActive,
-	})
+	// Membership is a roster of people. The owner tuple written above is what
+	// grants access, so an identity that is not a user holds the organization
+	// without appearing in it -- which is what the platform admin identity needs
+	// to create the system organization without putting a member in it that the
+	// Console cannot name.
+	isUser, err := s.callerIsUser(ctx, identityID)
 	if err != nil {
 		_ = s.deleteTuple(ctx, identityID, "owner", organization.ID)
 		_ = s.deleteClusterTuple(ctx, "cluster", organization.ID)
 		_ = s.store.DeleteOrganization(ctx, organization.ID)
-		return nil, toStatusError(err)
+		return nil, status.Errorf(codes.Internal, "resolve caller identity type: %v", err)
+	}
+	if isUser {
+		_, err = s.store.CreateMembership(ctx, store.MembershipInput{
+			OrganizationID: organization.ID,
+			IdentityID:     identityID,
+			Role:           store.MembershipRoleOwner,
+			Status:         store.MembershipStatusActive,
+		})
+		if err != nil {
+			_ = s.deleteTuple(ctx, identityID, "owner", organization.ID)
+			_ = s.deleteClusterTuple(ctx, "cluster", organization.ID)
+			_ = s.store.DeleteOrganization(ctx, organization.ID)
+			return nil, toStatusError(err)
+		}
 	}
 	if err := s.seedDefaultNickname(ctx, organization.ID, identityID, identityID); err != nil {
 		log.Printf("seed default nickname failed (org=%s identity=%s): %v", organization.ID, identityID, err)
@@ -205,65 +219,6 @@ func (s *Server) GetOrganization(ctx context.Context, req *organizationsv1.GetOr
 		return nil, toStatusError(err)
 	}
 	return &organizationsv1.GetOrganizationResponse{Organization: toProtoOrganization(organization)}, nil
-}
-
-// RegisterPlatformOrganization creates the organization platform-shipped
-// resources live in when nothing holds that slug, and returns the existing one
-// otherwise. Create-if-absent is what makes re-running an upgrade safe: an
-// operator who renamed it keeps the rename, and the platform does not fight
-// them for it on every release.
-//
-// It gets no members and no owner tuple. Cluster admins already hold
-// owner-level access to every organization, so it is administrable without
-// anyone being added to it, and no human identity has to be manufactured at
-// install time.
-func (s *Server) RegisterPlatformOrganization(ctx context.Context, req *organizationsv1.RegisterPlatformOrganizationRequest) (*organizationsv1.RegisterPlatformOrganizationResponse, error) {
-	slug, err := validateSlug(req.GetSlug())
-	if err != nil {
-		return nil, err
-	}
-	name := strings.TrimSpace(req.GetName())
-	if name == "" {
-		name = slug
-	}
-
-	existing, err := s.store.GetOrganizationBySlug(ctx, slug)
-	if err == nil {
-		return &organizationsv1.RegisterPlatformOrganizationResponse{
-			Organization: toProtoOrganization(existing),
-			Created:      false,
-		}, nil
-	}
-	var notFound *store.NotFoundError
-	if !errors.As(err, &notFound) {
-		return nil, toStatusError(err)
-	}
-
-	organization, err := s.store.CreateOrganization(ctx, store.OrganizationInput{Name: name, Slug: slug})
-	if err != nil {
-		// A concurrent provisioning run won the insert; returning its record
-		// keeps the call create-if-absent rather than failing the upgrade.
-		var exists *store.AlreadyExistsError
-		if errors.As(err, &exists) {
-			if raced, getErr := s.store.GetOrganizationBySlug(ctx, slug); getErr == nil {
-				return &organizationsv1.RegisterPlatformOrganizationResponse{
-					Organization: toProtoOrganization(raced),
-					Created:      false,
-				}, nil
-			}
-		}
-		return nil, toStatusError(err)
-	}
-
-	if err := s.writeClusterTuple(ctx, "cluster", organization.ID); err != nil {
-		_ = s.store.DeleteOrganization(ctx, organization.ID)
-		return nil, status.Errorf(codes.Internal, "failed to write cluster tuple: %v", err)
-	}
-
-	return &organizationsv1.RegisterPlatformOrganizationResponse{
-		Organization: toProtoOrganization(organization),
-		Created:      true,
-	}, nil
 }
 
 // GetOrganizationBySlug is internal: the Image Proxy resolves the slug in a

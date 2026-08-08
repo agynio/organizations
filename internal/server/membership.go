@@ -368,6 +368,20 @@ func (s *Server) ensureIdentityExists(ctx context.Context, identityID uuid.UUID)
 	return status.Errorf(codes.Internal, "identity lookup failed: %v", err)
 }
 
+// callerIsUser reports whether an identity belongs to a person. An identity
+// nothing registered is not one: every user is registered when their account is
+// provisioned, well before they can create anything.
+func (s *Server) callerIsUser(ctx context.Context, identityID uuid.UUID) (bool, error) {
+	identityType, err := s.identityClient.GetIdentityType(ctx, &identityv1.GetIdentityTypeRequest{IdentityId: identityID.String()})
+	if err != nil {
+		if status.Code(err) == codes.NotFound {
+			return false, nil
+		}
+		return false, err
+	}
+	return identityType.GetIdentityType() == identityv1.IdentityType_IDENTITY_TYPE_USER, nil
+}
+
 func (s *Server) seedDefaultNickname(ctx context.Context, organizationID uuid.UUID, identityID uuid.UUID, callerID uuid.UUID) error {
 	identityType, err := s.identityClient.GetIdentityType(ctx, &identityv1.GetIdentityTypeRequest{IdentityId: identityID.String()})
 	if err != nil {
