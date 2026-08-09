@@ -1,8 +1,7 @@
 {{- if .Values.internalAuthorizationPolicy.enabled }}
 {{- $namespace := .Release.Namespace }}
-# RegisterPlatformOrganization creates an organization with no user behind it,
-# and GetOrganizationBySlug resolves a reference path without one. Neither
-# carries an identity a permission check could refuse, so who may reach them at
+# GetOrganizationBySlug resolves a reference path without a user behind it, so
+# it carries no identity a permission check could refuse and who may reach it at
 # all is settled here.
 apiVersion: security.istio.io/v1beta1
 kind: AuthorizationPolicy
@@ -29,6 +28,5 @@ spec:
             methods:
               - POST
             paths:
-              - /agynio.api.organizations.v1.OrganizationsService/RegisterPlatformOrganization
               - /agynio.api.organizations.v1.OrganizationsService/GetOrganizationBySlug
 {{- end }}

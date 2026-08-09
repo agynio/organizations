@@ -164,12 +164,10 @@ metrics:
         interval: ""
         scrapeTimeout: ""
 
-# RegisterPlatformOrganization and GetOrganizationBySlug carry no user identity
-# - they are restricted by reachability rather than by a permission check.
+# GetOrganizationBySlug carries no user identity - it is restricted by
+# reachability rather than by a permission check.
 internalAuthorizationPolicy:
   enabled: true
   serviceAccounts:
-    - name: platform-provisioner
-      namespace: ""
     - name: image-proxy
       namespace: ""
