@@ -20,7 +20,7 @@ func TestSlugFromName(t *testing.T) {
 		{"ACME_CORP", "acme-corp"},
 		{"...", "org"},
 		{"", "org"},
-		{strings.Repeat("a", 80), strings.Repeat("a", 64)},
+		{strings.Repeat("a", 80), strings.Repeat("a", maxSlugLength)},
 	}
 	for _, test := range tests {
 		if got := slugFromName(test.name); got != test.want {
@@ -52,6 +52,21 @@ func TestValidateSlug(t *testing.T) {
 		}
 		if status.Code(err) != codes.InvalidArgument {
 			t.Fatalf("code for %q = %v, want InvalidArgument", invalid, status.Code(err))
+		}
+	}
+}
+
+// The slug is a hostname label in an exposed port's address, so the values a
+// hostname rejects have to be rejected here.
+func TestValidateSlugRejectsWhatAHostnameLabelRejects(t *testing.T) {
+	for _, slug := range []string{"-acme", "acme-", "-", strings.Repeat("a", 64)} {
+		if _, err := validateSlug(slug); status.Code(err) != codes.InvalidArgument {
+			t.Errorf("validateSlug(%q) = %v, want InvalidArgument", slug, err)
+		}
+	}
+	for _, slug := range []string{"a", "acme", "acme-corp", "a1", strings.Repeat("a", 63)} {
+		if _, err := validateSlug(slug); err != nil {
+			t.Errorf("validateSlug(%q) = %v, want no error", slug, err)
 		}
 	}
 }

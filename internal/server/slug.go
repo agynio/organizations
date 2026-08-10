@@ -12,10 +12,17 @@ import (
 	"google.golang.org/grpc/status"
 )
 
-const maxSlugLength = 64
+// maxSlugLength is the DNS limit on a single label. The Expose service puts the
+// slug in a hostname -- an exposed port is reachable at
+// <entity>.<org-slug>.agyn -- so a slug that is not a usable label is not a
+// usable slug. The other consumers, app addresses and image references, accept
+// anything the pattern allows and are unaffected by the tighter rule.
+const maxSlugLength = 63
 
 var (
-	slugPattern      = regexp.MustCompile(`^[a-z0-9-]+$`)
+	// A valid DNS label: no leading or trailing hyphen, which a hostname
+	// rejects and the previous ^[a-z0-9-]+$ allowed.
+	slugPattern      = regexp.MustCompile(`^[a-z0-9]([a-z0-9-]*[a-z0-9])?$`)
 	slugSeparators   = regexp.MustCompile(`[^a-z0-9]+`)
 	slugTrimmedDashs = regexp.MustCompile(`^-+|-+$`)
 )
@@ -29,7 +36,7 @@ func validateSlug(value string) (string, error) {
 		return "", status.Errorf(codes.InvalidArgument, "slug: must be at most %d characters", maxSlugLength)
 	}
 	if !slugPattern.MatchString(trimmed) {
-		return "", status.Error(codes.InvalidArgument, "slug: must match ^[a-z0-9-]+$")
+		return "", status.Errorf(codes.InvalidArgument, "slug: must match %s", slugPattern.String())
 	}
 	return trimmed, nil
 }
